@@ -14,6 +14,7 @@ from .ocr import (
     describe_image,
     describe_image_for_search,
 )
+from .hybrid import extract_hybrid_text, text_quality_score
 
 __all__ = [
     "convert_pdf_to_images",
@@ -26,4 +27,6 @@ __all__ = [
     "get_image_count",
     "describe_image",
     "describe_image_for_search",
+    "extract_hybrid_text",
+    "text_quality_score",
 ]

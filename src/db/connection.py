@@ -50,6 +50,8 @@ def init_db():
             volume TEXT,
             page_count INTEGER,
             extracted_text TEXT,
+            embedded_text TEXT,
+            ocr_text TEXT,
             ocr_status TEXT DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -103,6 +105,17 @@ def init_db():
     # Add page_number column if it doesn't exist (migration for existing DBs)
     try:
         conn.execute("ALTER TABLE chunks ADD COLUMN page_number INTEGER DEFAULT 1")
+    except:
+        pass  # Column already exists
+
+    # Add embedded_text and ocr_text columns (migration for existing DBs)
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN embedded_text TEXT")
+    except:
+        pass  # Column already exists
+
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN ocr_text TEXT")
     except:
         pass  # Column already exists
 

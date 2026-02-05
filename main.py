@@ -40,24 +40,26 @@ def cli():
 @cli.command()
 @click.option("--limit", "-l", default=None, type=int, help="Maximum documents to process (default: no limit)")
 @click.option("--volume", "-v", help="Specific volume to process")
-@click.option("--mode", "-m", type=click.Choice(["ocr", "embedded", "register"]), default="ocr",
-              help="Processing mode: ocr (full OCR), embedded (extract text only), register (no extraction)")
+@click.option("--mode", "-m", type=click.Choice(["ocr", "embedded", "hybrid", "register"]), default="hybrid",
+              help="Processing mode: ocr (full OCR), embedded (extract text only), hybrid (smart), register (no extraction)")
 def index(limit: int | None, volume: str, mode: str):
     """Index documents from the data directory.
 
     Modes:
       - ocr: Full OCR processing with glm-ocr (slow, for scanned docs)
       - embedded: Extract embedded text only (fast, for digital PDFs)
+      - hybrid: Smart mode — embedded text first, OCR only pages with poor text (recommended)
       - register: Just register documents, no text extraction
     """
-    from src.extraction import extract_text_from_pdf, extract_embedded_text, get_pdf_page_count
+    from src.extraction import extract_text_from_pdf, extract_embedded_text, get_pdf_page_count, extract_hybrid_text
     from src.indexing import chunk_document, VectorStore
     from src.db.models import update_document_text
 
     mode_desc = {
         "ocr": "OCR processing (slow)",
         "embedded": "Embedded text extraction (fast)",
-        "register": "Registration only"
+        "hybrid": "Hybrid extraction (smart — OCR only where needed)",
+        "register": "Registration only",
     }
     console.print(Panel(f"Starting document indexing - {mode_desc[mode]}", title="Index"))
 
@@ -150,6 +152,9 @@ def index(limit: int | None, volume: str, mode: str):
 
             try:
                 # Extract text based on mode
+                embedded_text = None
+                ocr_text = None
+
                 if mode == "embedded":
                     text, page_count = extract_embedded_text(file_path)
                     if not text.strip():
@@ -157,10 +162,22 @@ def index(limit: int | None, volume: str, mode: str):
                         skipped += 1
                         progress.advance(task)
                         continue
+                    embedded_text = text
+                elif mode == "hybrid":
+                    text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
+                    if not text.strip():
+                        skipped += 1
+                        progress.advance(task)
+                        continue
                 else:  # ocr mode
                     text, page_count = extract_text_from_pdf(file_path)
+                    ocr_text = text
 
-                update_document_text(doc_id, text, page_count)
+                update_document_text(
+                    doc_id, text, page_count,
+                    embedded_text=embedded_text,
+                    ocr_text=ocr_text,
+                )
 
                 # Chunk and embed
                 chunk_ids = chunk_document(doc_id)

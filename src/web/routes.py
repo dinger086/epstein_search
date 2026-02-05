@@ -100,7 +100,7 @@ def _do_indexing(mode: str, limit: int):
     """Actual indexing logic."""
     global _indexing_job
 
-    from ..extraction import extract_text_from_pdf, extract_embedded_text
+    from ..extraction import extract_text_from_pdf, extract_embedded_text, extract_hybrid_text
     from ..indexing import chunk_document, VectorStore, get_embeddings
     from ..db.models import get_chunks_for_document, update_chunk_embedding
 
@@ -147,15 +147,29 @@ def _do_indexing(mode: str, limit: int):
 
         try:
             # Extract text
+            embedded_text = None
+            ocr_text = None
+
             if mode == "embedded":
                 text, page_count = extract_embedded_text(file_path)
                 if not text.strip():
                     _indexing_job.processed += 1
                     continue
-            else:
+                embedded_text = text
+            elif mode == "hybrid":
+                text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
+                if not text.strip():
+                    _indexing_job.processed += 1
+                    continue
+            else:  # ocr
                 text, page_count = extract_text_from_pdf(file_path)
+                ocr_text = text
 
-            update_document_text(doc_id, text, page_count)
+            update_document_text(
+                doc_id, text, page_count,
+                embedded_text=embedded_text,
+                ocr_text=ocr_text,
+            )
 
             # Chunk and embed
             chunk_ids = chunk_document(doc_id)

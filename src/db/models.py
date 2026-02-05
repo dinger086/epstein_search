@@ -102,27 +102,33 @@ def update_document_status(doc_id: str, status: str):
         )
 
 
-def update_document_text(doc_id: str, text: str, page_count: int = None):
-    """Update document extracted text."""
+def update_document_text(
+    doc_id: str,
+    text: str,
+    page_count: int = None,
+    embedded_text: str = None,
+    ocr_text: str = None,
+):
+    """Update document extracted text and optional raw text archives."""
     with transaction() as conn:
+        clauses = ["extracted_text = ?", "ocr_status = 'completed'"]
+        params = [text]
+
         if page_count is not None:
-            conn.execute(
-                """
-                UPDATE documents
-                SET extracted_text = ?, page_count = ?, ocr_status = 'completed'
-                WHERE doc_id = ?
-                """,
-                (text, page_count, doc_id)
-            )
-        else:
-            conn.execute(
-                """
-                UPDATE documents
-                SET extracted_text = ?, ocr_status = 'completed'
-                WHERE doc_id = ?
-                """,
-                (text, doc_id)
-            )
+            clauses.append("page_count = ?")
+            params.append(page_count)
+        if embedded_text is not None:
+            clauses.append("embedded_text = ?")
+            params.append(embedded_text)
+        if ocr_text is not None:
+            clauses.append("ocr_text = ?")
+            params.append(ocr_text)
+
+        params.append(doc_id)
+        conn.execute(
+            f"UPDATE documents SET {', '.join(clauses)} WHERE doc_id = ?",
+            params,
+        )
 
 
 def get_all_documents(limit: int = None) -> list[dict]:

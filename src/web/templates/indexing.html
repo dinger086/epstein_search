@@ -40,11 +40,13 @@
                     <div>
                         <label class="block text-sm text-gray-400 mb-2">Processing Mode</label>
                         <select name="mode" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                            <option value="hybrid">Hybrid - Smart (recommended)</option>
                             <option value="embedded">Embedded Text (fast)</option>
                             <option value="ocr">Full OCR (slow)</option>
                             <option value="register">Register Only (no extraction)</option>
                         </select>
                         <p class="text-xs text-gray-500 mt-1">
+                            Hybrid: Embedded text first, OCR only pages with poor text (recommended)<br>
                             Embedded: Extract selectable text from PDFs<br>
                             OCR: Use AI vision to read scanned documents<br>
                             Register: Just add files to database
@@ -115,6 +117,7 @@
                 <li>Place your PDF files in the <code class="bg-gray-700 px-2 py-1 rounded">data/</code> directory</li>
                 <li>Choose a processing mode:
                     <ul class="list-disc list-inside ml-4 mt-1 text-gray-400">
+                        <li><strong>Hybrid - Smart</strong> - Recommended: extracts embedded text, OCRs only pages with poor text</li>
                         <li><strong>Embedded Text</strong> - Fast, works for PDFs with selectable text</li>
                         <li><strong>Full OCR</strong> - Slower, uses AI to read scanned/image PDFs</li>
                         <li><strong>Register Only</strong> - Just adds files to database without text extraction</li>
@@ -125,8 +128,8 @@
             </ol>
 
             <p class="mt-4 text-gray-400">
-                <strong>Tip:</strong> For large collections, start with "Embedded Text" mode to quickly process
-                PDFs with selectable text, then use "Full OCR" for the remaining scanned documents.
+                <strong>Tip:</strong> Use "Hybrid - Smart" mode for best results — it extracts embedded text
+                first and only runs OCR on pages that need it, saving time on large collections.
             </p>
         </div>
     </div>
