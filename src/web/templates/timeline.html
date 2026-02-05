@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Timeline - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Timeline</h1>
+
+    <!-- Date Filter -->
+    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <form action="/timeline" method="get" class="flex gap-4 items-end">
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">From Date</label>
+                <input
+                    type="date"
+                    name="from_date"
+                    value="{{ from_date }}"
+                    class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+            </div>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">To Date</label>
+                <input
+                    type="date"
+                    name="to_date"
+                    value="{{ to_date }}"
+                    class="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+            </div>
+            <button type="submit" class="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg">
+                Filter
+            </button>
+        </form>
+    </div>
+
+    <!-- Timeline Results -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        {% if results %}
+        <div class="divide-y divide-gray-700">
+            {% for item in results %}
+            <div class="p-4 hover:bg-gray-750">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <span class="text-amber-500 font-medium">{{ item.parsed_date or item.date_str }}</span>
+                        <a href="/document/{{ item.doc_id }}" class="ml-4 text-gray-300 hover:text-white">
+                            {{ item.doc_id }}
+                        </a>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-400 mt-2">{{ item.context }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-gray-500 py-12">
+            No dated documents found. Run <code class="bg-gray-700 px-2 py-1 rounded">entities --extract</code> first.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

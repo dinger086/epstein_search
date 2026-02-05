@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Documents - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Documents</h1>
+        <span class="text-gray-400">{{ "{:,}".format(total) }} total</span>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-700">
+            <thead class="bg-gray-750">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Doc ID</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Volume</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Pages</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700">
+                {% for doc in documents %}
+                <tr class="hover:bg-gray-750 cursor-pointer" onclick="window.location='/document/{{ doc.doc_id }}'">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <a href="/document/{{ doc.doc_id }}" class="text-amber-500 hover:text-amber-400">{{ doc.doc_id }}</a>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-300">{{ doc.volume or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-gray-300">{{ doc.page_count or '-' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        {% if doc.ocr_status == 'completed' %}
+                        <span class="px-2 py-1 text-xs rounded-full bg-green-900 text-green-300">Completed</span>
+                        {% elif doc.ocr_status == 'pending' %}
+                        <span class="px-2 py-1 text-xs rounded-full bg-yellow-900 text-yellow-300">Pending</span>
+                        {% else %}
+                        <span class="px-2 py-1 text-xs rounded-full bg-red-900 text-red-300">{{ doc.ocr_status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="px-6 py-12 text-center text-gray-500">No documents found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

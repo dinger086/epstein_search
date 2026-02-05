@@ -1,0 +1,64 @@
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-amber-500">{{ entity }}</h3>
+        <span class="text-sm text-gray-400">{{ connections.document_count }} documents</span>
+    </div>
+
+    {% if connections.documents %}
+    <div>
+        <h4 class="text-sm font-medium text-gray-400 mb-2">Documents</h4>
+        <div class="flex flex-wrap gap-2">
+            {% for doc_id in connections.documents[:10] %}
+            <a href="/document/{{ doc_id }}" class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-amber-400">
+                {{ doc_id }}
+            </a>
+            {% endfor %}
+            {% if connections.documents|length > 10 %}
+            <span class="text-xs px-2 py-1 text-gray-500">+{{ connections.documents|length - 10 }} more</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if co_people %}
+    <div>
+        <h4 class="text-sm font-medium text-gray-400 mb-2">Frequently appears with</h4>
+        <div class="space-y-2">
+            {% for person in co_people %}
+            <div class="flex justify-between items-center p-2 bg-gray-750 rounded">
+                <span
+                    class="text-gray-200 cursor-pointer hover:text-amber-400"
+                    hx-get="/connections/{{ person.entity_value | urlencode }}"
+                    hx-target="#connection-panel"
+                    hx-swap="innerHTML"
+                >
+                    {{ person.entity_value }}
+                </span>
+                <span class="text-xs text-gray-500">{{ person.count }} co-occurrences</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if connections.related_entities %}
+    <div>
+        <h4 class="text-sm font-medium text-gray-400 mb-2">Related entities</h4>
+        {% for type, values in connections.related_entities.items() %}
+        {% if values %}
+        <div class="mb-2">
+            <span class="text-xs text-gray-500">{{ type }}:</span>
+            <div class="flex flex-wrap gap-1 mt-1">
+                {% for val in values[:5] %}
+                <span class="text-xs px-2 py-1 bg-gray-700 rounded">{{ val }}</span>
+                {% endfor %}
+                {% if values|length > 5 %}
+                <span class="text-xs px-2 py-1 text-gray-500">+{{ values|length - 5 }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>

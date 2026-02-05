@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Images - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Images</h1>
+        <span class="text-gray-400">{{ "{:,}".format(total) }} total</span>
+    </div>
+
+    <!-- Search -->
+    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <form hx-post="/search-images" hx-target="#image-results" hx-indicator="#img-search-spinner">
+            <div class="flex gap-4">
+                <input
+                    type="text"
+                    name="query"
+                    placeholder="Search images by description..."
+                    class="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                <button type="submit" class="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg">
+                    <span id="img-search-spinner" class="htmx-indicator">
+                        <svg class="animate-spin h-4 w-4 inline mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                    </span>
+                    Search
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Image Grid -->
+    <div id="image-results">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {% for img in images %}
+            <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden group">
+                <div class="relative">
+                    <img
+                        src="/images/{{ img.file_path | basename }}"
+                        alt="{{ img.description[:50] if img.description else 'Image' }}"
+                        class="w-full h-48 object-cover"
+                        onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23374151%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2250%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%239CA3AF%22 font-size=%2212%22>No Image</text></svg>'"
+                    >
+                    <div class="absolute top-2 right-2 px-2 py-1 bg-black bg-opacity-75 rounded text-xs">
+                        {{ img.width }}x{{ img.height }}
+                    </div>
+                </div>
+                <div class="p-3">
+                    <a href="/document/{{ img.doc_id }}" class="text-amber-500 hover:text-amber-400 text-sm font-medium">
+                        {{ img.doc_id }}
+                    </a>
+                    <div class="text-xs text-gray-500">Page {{ img.page_number }}</div>
+                    {% if img.description %}
+                    <p class="text-xs text-gray-400 mt-2 line-clamp-3">{{ img.description[:100] }}{% if img.description|length > 100 %}...{% endif %}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center text-gray-500 py-12">
+                No images found. Run <code class="bg-gray-800 px-2 py-1 rounded">extract-images</code> to extract images from documents.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

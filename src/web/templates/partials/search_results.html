@@ -1,0 +1,78 @@
+{% if results %}
+<div class="space-y-4">
+    <div class="text-sm text-gray-400">
+        Found {{ results|length }} results for "{{ query }}" ({{ search_type }})
+    </div>
+
+    {% for result in results %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 hover:border-gray-600 transition-colors">
+        <div class="flex justify-between items-start">
+            <div class="flex items-center gap-3">
+                <a href="/document/{{ result.doc_id }}{% if result.page_number %}?page={{ result.page_number }}{% endif %}" class="text-lg font-medium text-amber-500 hover:text-amber-400">
+                    {{ result.doc_id }}
+                </a>
+                {% if result.page_number %}
+                <a href="/document/{{ result.doc_id }}?page={{ result.page_number }}" class="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded">
+                    Page {{ result.page_number }}
+                </a>
+                {% endif %}
+            </div>
+            <span class="text-sm text-gray-500">
+                {% if result.similarity is defined %}
+                    Score: {{ "%.3f"|format(result.similarity) }}
+                {% elif result.rrf_score is defined %}
+                    Score: {{ "%.3f"|format(result.rrf_score) }}
+                {% elif result.score is defined %}
+                    Score: {{ "%.3f"|format(result.score|abs) }}
+                {% endif %}
+            </span>
+        </div>
+
+        {% if result.snippet %}
+        <p class="text-sm text-gray-300 mt-2 search-result-text">{{ result.snippet | safe }}</p>
+        {% elif result.chunk_text %}
+        <p class="text-sm text-gray-300 mt-2 search-result-text" data-query="{{ query }}">{{ result.chunk_text[:300] }}{% if result.chunk_text|length > 300 %}...{% endif %}</p>
+        {% endif %}
+
+        {% if result.file_path %}
+        <div class="text-xs text-gray-500 mt-2">{{ result.file_path | basename }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    mark, .highlight {
+        background-color: rgba(251, 191, 36, 0.3);
+        color: inherit;
+        padding: 0 2px;
+        border-radius: 2px;
+    }
+</style>
+
+<script>
+    // Highlight search query in results
+    document.querySelectorAll('.search-result-text[data-query]').forEach(el => {
+        const query = el.dataset.query;
+        if (!query) return;
+
+        const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+        let html = el.textContent;
+
+        words.forEach(word => {
+            const regex = new RegExp(`(${word})`, 'gi');
+            html = html.replace(regex, '<mark>$1</mark>');
+        });
+
+        el.innerHTML = html;
+    });
+</script>
+{% else %}
+<div class="text-center text-gray-500 py-12">
+    {% if query %}
+    No results found for "{{ query }}"
+    {% else %}
+    Enter a search query to find documents
+    {% endif %}
+</div>
+{% endif %}

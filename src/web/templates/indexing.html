@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Indexing - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Document Indexing</h1>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-2xl font-bold text-blue-500">{{ "{:,}".format(pdf_count) }}</div>
+            <div class="text-sm text-gray-400">PDFs in Data</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-2xl font-bold text-amber-500">{{ "{:,}".format(doc_count) }}</div>
+            <div class="text-sm text-gray-400">Registered</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-2xl font-bold text-yellow-500">{{ "{:,}".format(pending) }}</div>
+            <div class="text-sm text-gray-400">Pending</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-2xl font-bold text-green-500">{{ "{:,}".format(completed) }}</div>
+            <div class="text-sm text-gray-400">Completed</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-2xl font-bold text-red-500">{{ "{:,}".format(failed) }}</div>
+            <div class="text-sm text-gray-400">Failed</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Start Indexing -->
+        <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 class="text-lg font-semibold mb-4">Start Indexing</h2>
+
+            <form hx-post="/indexing/start" hx-target="#indexing-status" hx-indicator="#start-spinner">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Processing Mode</label>
+                        <select name="mode" class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                            <option value="embedded">Embedded Text (fast)</option>
+                            <option value="ocr">Full OCR (slow)</option>
+                            <option value="register">Register Only (no extraction)</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Embedded: Extract selectable text from PDFs<br>
+                            OCR: Use AI vision to read scanned documents<br>
+                            Register: Just add files to database
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-gray-400 mb-2">Document Limit</label>
+                        <input
+                            type="number"
+                            name="limit"
+                            value="1000"
+                            min="1"
+                            max="100000"
+                            class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-600 text-white font-medium rounded-lg transition-colors"
+                        {% if job.status == 'running' %}disabled{% endif %}
+                    >
+                        <span id="start-spinner" class="htmx-indicator">
+                            <svg class="animate-spin h-5 w-5 inline mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                        </span>
+                        {% if job.status == 'running' %}
+                        Indexing in Progress...
+                        {% else %}
+                        Start Indexing
+                        {% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Status Panel -->
+        <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold">Status</h2>
+                <button
+                    hx-get="/indexing/status"
+                    hx-target="#indexing-status"
+                    hx-trigger="click, every 2s[document.querySelector('[data-status=running]')]"
+                    class="text-sm text-gray-400 hover:text-white"
+                >
+                    Refresh
+                </button>
+            </div>
+
+            <div id="indexing-status"
+                 hx-get="/indexing/status"
+                 hx-trigger="load, every 3s[document.querySelector('[data-status=running]')]"
+                 hx-swap="innerHTML">
+                {% include "partials/indexing_status.html" %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+        <h2 class="text-lg font-semibold mb-4">Instructions</h2>
+        <div class="prose prose-invert prose-sm max-w-none">
+            <ol class="list-decimal list-inside space-y-2 text-gray-300">
+                <li>Place your PDF files in the <code class="bg-gray-700 px-2 py-1 rounded">data/</code> directory</li>
+                <li>Choose a processing mode:
+                    <ul class="list-disc list-inside ml-4 mt-1 text-gray-400">
+                        <li><strong>Embedded Text</strong> - Fast, works for PDFs with selectable text</li>
+                        <li><strong>Full OCR</strong> - Slower, uses AI to read scanned/image PDFs</li>
+                        <li><strong>Register Only</strong> - Just adds files to database without text extraction</li>
+                    </ul>
+                </li>
+                <li>Set a document limit (start small to test)</li>
+                <li>Click Start Indexing and monitor progress</li>
+            </ol>
+
+            <p class="mt-4 text-gray-400">
+                <strong>Tip:</strong> For large collections, start with "Embedded Text" mode to quickly process
+                PDFs with selectable text, then use "Full OCR" for the remaining scanned documents.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

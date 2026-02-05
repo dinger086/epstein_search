@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}{{ doc.doc_id }} - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-start">
+        <div>
+            <h1 class="text-2xl font-bold text-amber-500">{{ doc.doc_id }}</h1>
+            <p class="text-gray-400 mt-1">{{ doc.file_path }}</p>
+        </div>
+        <div class="text-right">
+            <div class="text-sm text-gray-400">Volume: {{ doc.volume or 'N/A' }}</div>
+            <div class="text-sm text-gray-400">Pages: {{ doc.page_count or 'N/A' }}</div>
+            {% if doc.ocr_status == 'completed' %}
+            <span class="px-2 py-1 text-xs rounded-full bg-green-900 text-green-300">Completed</span>
+            {% else %}
+            <span class="px-2 py-1 text-xs rounded-full bg-yellow-900 text-yellow-300">{{ doc.ocr_status }}</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- PDF Viewer -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Document Viewer</h2>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <button id="prev-page" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">←</button>
+                            <span class="text-sm">
+                                Page <input type="number" id="page-num" class="w-12 bg-gray-700 text-center rounded px-1" value="1" min="1">
+                                of <span id="page-count">-</span>
+                            </span>
+                            <button id="next-page" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">→</button>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button id="zoom-out" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">-</button>
+                            <span id="zoom-level" class="text-sm w-12 text-center">100%</span>
+                            <button id="zoom-in" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">+</button>
+                        </div>
+                        <button id="toggle-text" class="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm">Show Text</button>
+                    </div>
+                </div>
+                <div id="pdf-container" class="bg-gray-900 rounded overflow-auto" style="height: 70vh;">
+                    <div id="pdf-page-wrapper" style="position: relative; display: inline-block; margin: 0 auto;">
+                        <canvas id="pdf-canvas"></canvas>
+                        <div id="pdf-text-layer" class="textLayer"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extracted Text (hidden by default) -->
+            <div id="text-container" class="bg-gray-800 rounded-lg border border-gray-700 p-6 hidden">
+                <h2 class="text-lg font-semibold mb-4">Extracted Text</h2>
+                {% if doc.extracted_text %}
+                <div class="bg-gray-900 rounded p-4 max-h-96 overflow-y-auto">
+                    <pre class="text-sm text-gray-300 whitespace-pre-wrap font-mono">{{ doc.extracted_text }}</pre>
+                </div>
+                {% else %}
+                <p class="text-gray-500">No text extracted yet</p>
+                {% endif %}
+            </div>
+
+            <!-- Images -->
+            {% if images %}
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 class="text-lg font-semibold mb-4">Images ({{ images|length }})</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {% for img in images %}
+                    <div class="relative group">
+                        <img
+                            src="/images/{{ img.file_path | basename }}"
+                            alt="Page {{ img.page_number }}"
+                            class="w-full h-40 object-cover rounded-lg border border-gray-600"
+                            onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23374151%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2250%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%239CA3AF%22 font-size=%2212%22>No Image</text></svg>'"
+                        >
+                        <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-75 text-xs p-2 rounded-b-lg">
+                            Page {{ img.page_number }}
+                        </div>
+                        {% if img.description %}
+                        <div class="absolute inset-0 bg-black bg-opacity-90 opacity-0 group-hover:opacity-100 transition-opacity p-2 rounded-lg overflow-y-auto">
+                            <p class="text-xs text-gray-300">{{ img.description[:200] }}{% if img.description|length > 200 %}...{% endif %}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Entities -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 class="text-lg font-semibold mb-4">Entities</h2>
+                {% if entities %}
+                <div class="space-y-4">
+                    {% set entity_types = entities | groupby('entity_type') %}
+                    {% for type, items in entity_types %}
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-400 mb-2">{{ type }}</h3>
+                        <div class="flex flex-wrap gap-2">
+                            {% for entity in items[:10] %}
+                            <a href="/entities?entity_type={{ type }}"
+                               hx-get="/connections/{{ entity.entity_value | urlencode }}"
+                               hx-target="#connection-modal"
+                               hx-trigger="click"
+                               class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded cursor-pointer">
+                                {{ entity.entity_value }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-sm">No entities extracted</p>
+                {% endif %}
+            </div>
+
+            <!-- Find Similar -->
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <h2 class="text-lg font-semibold mb-4">Actions</h2>
+                <div class="space-y-2">
+                    <button
+                        hx-post="/search"
+                        hx-vals='{"query": "{{ doc.doc_id }}", "search_type": "semantic", "limit": "10"}'
+                        hx-target="#similar-results"
+                        class="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+                    >
+                        Find Similar Documents
+                    </button>
+                </div>
+                <div id="similar-results" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Modal -->
+<div id="connection-modal"></div>
+
+<!-- PDF.js text layer styles -->
+<style>
+    #pdf-container {
+        text-align: center;
+    }
+    #pdf-page-wrapper {
+        position: relative;
+        display: inline-block;
+    }
+    .textLayer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+        opacity: 0.25;
+        line-height: 1.0;
+    }
+    .textLayer > span {
+        color: transparent;
+        position: absolute;
+        white-space: pre;
+        transform-origin: 0% 0%;
+    }
+    .textLayer ::selection {
+        background: rgba(0, 100, 200, 0.4);
+    }
+</style>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+    // Configure PDF.js worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const pdfContainer = document.getElementById('pdf-container');
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const pageNumInput = document.getElementById('page-num');
+    const pageCountSpan = document.getElementById('page-count');
+    const zoomLevelSpan = document.getElementById('zoom-level');
+
+    let pdfDoc = null;
+    let pageNum = 1;
+    let scale = 1.5;
+    let rendering = false;
+
+    // Get PDF path from file_path - extract relative path from data directory
+    const filePath = "{{ doc.file_path | replace('\\\\', '/') | replace('\\', '/') }}";
+    const dataDir = "{{ config.DATA_DIR | replace('\\\\', '/') | replace('\\', '/') }}";
+
+    // Extract relative path after the data directory
+    let pdfPath = filePath;
+    const normalizedDataDir = dataDir.toLowerCase();
+    const normalizedFilePath = filePath.toLowerCase();
+
+    if (normalizedFilePath.includes(normalizedDataDir)) {
+        // Get the part after DATA_DIR
+        const idx = normalizedFilePath.indexOf(normalizedDataDir);
+        pdfPath = filePath.substring(idx + dataDir.length);
+        // Remove leading slash if present
+        if (pdfPath.startsWith('/')) pdfPath = pdfPath.substring(1);
+    }
+
+    const pdfUrl = '/pdfs/' + encodeURI(pdfPath);
+    console.log('Loading PDF from:', pdfUrl);
+
+    // Check for page parameter in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialPage = parseInt(urlParams.get('page')) || 1;
+
+    const textLayerDiv = document.getElementById('pdf-text-layer');
+
+    function renderPage(num) {
+        if (rendering) return;
+        rendering = true;
+
+        pdfDoc.getPage(num).then(function(page) {
+            const viewport = page.getViewport({ scale: scale });
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            const renderContext = {
+                canvasContext: ctx,
+                viewport: viewport
+            };
+
+            // Clear previous text layer
+            textLayerDiv.innerHTML = '';
+            textLayerDiv.style.width = viewport.width + 'px';
+            textLayerDiv.style.height = viewport.height + 'px';
+
+            const canvasPromise = page.render(renderContext).promise;
+            const textPromise = page.getTextContent();
+
+            Promise.all([canvasPromise, textPromise]).then(function(results) {
+                const textContent = results[1];
+
+                pdfjsLib.renderTextLayer({
+                    textContentSource: textContent,
+                    container: textLayerDiv,
+                    viewport: viewport,
+                    textDivs: []
+                });
+
+                rendering = false;
+                pageNum = num;
+                pageNumInput.value = num;
+            });
+        });
+    }
+
+    function queueRenderPage(num) {
+        if (rendering) {
+            setTimeout(() => queueRenderPage(num), 100);
+        } else {
+            renderPage(num);
+        }
+    }
+
+    // Load PDF
+    pdfjsLib.getDocument(pdfUrl).promise.then(function(pdf) {
+        pdfDoc = pdf;
+        pageCountSpan.textContent = pdf.numPages;
+        pageNumInput.max = pdf.numPages;
+
+        // Go to initial page (from URL param or 1)
+        const startPage = Math.min(Math.max(1, initialPage), pdf.numPages);
+        renderPage(startPage);
+    }).catch(function(error) {
+        console.error('Error loading PDF:', error);
+        pdfContainer.innerHTML = '<div class="text-center text-gray-500 py-12">Could not load PDF. <br><small>' + error.message + '</small></div>';
+    });
+
+    // Navigation
+    document.getElementById('prev-page').addEventListener('click', function() {
+        if (pageNum <= 1) return;
+        queueRenderPage(pageNum - 1);
+    });
+
+    document.getElementById('next-page').addEventListener('click', function() {
+        if (pageNum >= pdfDoc.numPages) return;
+        queueRenderPage(pageNum + 1);
+    });
+
+    pageNumInput.addEventListener('change', function() {
+        const num = parseInt(this.value);
+        if (num >= 1 && num <= pdfDoc.numPages) {
+            queueRenderPage(num);
+        }
+    });
+
+    // Zoom
+    document.getElementById('zoom-in').addEventListener('click', function() {
+        scale = Math.min(scale + 0.25, 4);
+        zoomLevelSpan.textContent = Math.round(scale * 100 / 1.5) + '%';
+        queueRenderPage(pageNum);
+    });
+
+    document.getElementById('zoom-out').addEventListener('click', function() {
+        scale = Math.max(scale - 0.25, 0.5);
+        zoomLevelSpan.textContent = Math.round(scale * 100 / 1.5) + '%';
+        queueRenderPage(pageNum);
+    });
+
+    // Toggle text view
+    document.getElementById('toggle-text').addEventListener('click', function() {
+        const textContainer = document.getElementById('text-container');
+        textContainer.classList.toggle('hidden');
+        this.textContent = textContainer.classList.contains('hidden') ? 'Show Text' : 'Hide Text';
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'INPUT') return;
+        if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+            document.getElementById('prev-page').click();
+        } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+            document.getElementById('next-page').click();
+        }
+    });
+</script>
+{% endblock %}

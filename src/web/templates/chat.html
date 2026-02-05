@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Ask AI - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Ask AI</h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Chat Area -->
+        <div class="lg:col-span-2">
+            <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+                <!-- Chat History -->
+                <div id="chat-history" class="space-y-4 mb-6 max-h-96 overflow-y-auto">
+                    <div class="text-center text-gray-500 py-8">
+                        <p>Ask questions about the documents.</p>
+                        <p class="text-sm mt-2">The AI will search for relevant information and provide answers with sources.</p>
+                    </div>
+                </div>
+
+                <!-- Input -->
+                <form hx-post="/ask" hx-target="#chat-history" hx-swap="beforeend" hx-indicator="#ask-spinner" hx-on::after-request="this.reset()">
+                    <div class="flex gap-4">
+                        <input
+                            type="text"
+                            name="question"
+                            placeholder="Ask a question..."
+                            class="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            autocomplete="off"
+                        >
+                        <button type="submit" class="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors">
+                            <span id="ask-spinner" class="htmx-indicator">
+                                <svg class="animate-spin h-5 w-5 inline mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                            </span>
+                            Ask
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Example Questions -->
+        <div class="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            <h2 class="text-lg font-semibold mb-4">Example Questions</h2>
+            <div class="space-y-2">
+                {% for q in [
+                    "Who are the most frequently mentioned people?",
+                    "What locations are mentioned in the documents?",
+                    "Summarize the flight logs",
+                    "What dates appear most frequently?",
+                    "Are there any financial transactions documented?"
+                ] %}
+                <button
+                    class="w-full text-left px-3 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded text-gray-300"
+                    onclick="document.querySelector('input[name=question]').value = '{{ q }}'"
+                >
+                    {{ q }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

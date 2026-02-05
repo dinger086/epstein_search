@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-3xl font-bold text-amber-500">{{ "{:,}".format(doc_count) }}</div>
+            <div class="text-sm text-gray-400">Documents</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-3xl font-bold text-green-500">{{ "{:,}".format(completed) }}</div>
+            <div class="text-sm text-gray-400">Processed</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-3xl font-bold text-blue-500">{{ "{:,}".format(img_count) }}</div>
+            <div class="text-sm text-gray-400">Images</div>
+        </div>
+    </div>
+
+    <!-- Search Form -->
+    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <form hx-post="/search" hx-target="#search-results" hx-indicator="#search-spinner">
+            <div class="flex gap-4">
+                <div class="flex-1">
+                    <input
+                        type="text"
+                        name="query"
+                        placeholder="Search documents..."
+                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        autofocus
+                    >
+                </div>
+                <select name="search_type" class="px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <option value="hybrid">Hybrid</option>
+                    <option value="semantic">Semantic</option>
+                    <option value="keyword">Keyword</option>
+                </select>
+                <button type="submit" class="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors">
+                    <span id="search-spinner" class="htmx-indicator">
+                        <svg class="animate-spin h-5 w-5 inline mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </span>
+                    Search
+                </button>
+            </div>
+            <input type="hidden" name="limit" value="20">
+        </form>
+    </div>
+
+    <!-- Search Results -->
+    <div id="search-results">
+        <div class="text-center text-gray-500 py-12">
+            Enter a search query to find documents
+        </div>
+    </div>
+</div>
+{% endblock %}

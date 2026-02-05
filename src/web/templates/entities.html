@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Entities - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Entities</h1>
+    </div>
+
+    <!-- Entity Type Tabs -->
+    <div class="flex gap-2">
+        {% for type in ['PERSON', 'ORGANIZATION', 'LOCATION', 'DATE'] %}
+        <a href="/entities?entity_type={{ type }}"
+           class="px-4 py-2 rounded-lg text-sm font-medium {% if entity_type == type %}bg-amber-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+            {{ type }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Entity List -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+            {% for entity in entities %}
+            <div
+                class="flex justify-between items-center p-3 bg-gray-750 rounded-lg hover:bg-gray-700 cursor-pointer"
+                hx-get="/connections/{{ entity.entity_value | urlencode }}"
+                hx-target="#connection-panel"
+                hx-swap="innerHTML"
+            >
+                <span class="text-gray-200">{{ entity.entity_value }}</span>
+                <span class="px-2 py-1 bg-gray-600 rounded text-xs text-gray-300">{{ entity.count }}</span>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center text-gray-500 py-12">
+                No entities found. Run <code class="bg-gray-800 px-2 py-1 rounded">entities --extract</code> to extract entities.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Connection Panel -->
+    <div id="connection-panel" class="bg-gray-800 rounded-lg border border-gray-700 p-6 hidden">
+        <!-- Will be populated by HTMX -->
+    </div>
+</div>
+
+<script>
+    // Show connection panel when content is loaded
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        if (evt.detail.target.id === 'connection-panel') {
+            evt.detail.target.classList.remove('hidden');
+        }
+    });
+</script>
+{% endblock %}

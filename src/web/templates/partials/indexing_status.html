@@ -1,0 +1,108 @@
+<div data-status="{{ job.status }}">
+    <!-- Status Badge -->
+    <div class="flex items-center gap-3 mb-4">
+        {% if job.status == 'running' %}
+        <span class="flex items-center gap-2 px-3 py-1 bg-blue-900 text-blue-300 rounded-full text-sm">
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Running
+        </span>
+        {% elif job.status == 'completed' %}
+        <span class="px-3 py-1 bg-green-900 text-green-300 rounded-full text-sm">Completed</span>
+        {% elif job.status == 'failed' %}
+        <span class="px-3 py-1 bg-red-900 text-red-300 rounded-full text-sm">Failed</span>
+        {% else %}
+        <span class="px-3 py-1 bg-gray-700 text-gray-400 rounded-full text-sm">Idle</span>
+        {% endif %}
+
+        {% if job.mode %}
+        <span class="text-sm text-gray-500">Mode: {{ job.mode }}</span>
+        {% endif %}
+    </div>
+
+    {% if job.status == 'running' or job.status == 'completed' or job.status == 'failed' %}
+    <!-- Progress Bar -->
+    <div class="mb-4">
+        <div class="flex justify-between text-sm text-gray-400 mb-1">
+            <span>Progress</span>
+            <span>{{ job.processed }} / {{ job.total }}</span>
+        </div>
+        <div class="w-full bg-gray-700 rounded-full h-3">
+            {% set progress = (job.processed / job.total * 100) if job.total > 0 else 0 %}
+            <div class="h-3 rounded-full transition-all duration-500 {% if job.status == 'failed' %}bg-red-500{% elif job.status == 'completed' %}bg-green-500{% else %}bg-amber-500{% endif %}"
+                 style="width: {{ progress }}%"></div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4 mb-4">
+        <div class="text-center">
+            <div class="text-xl font-bold text-green-500">{{ job.processed }}</div>
+            <div class="text-xs text-gray-500">Processed</div>
+        </div>
+        <div class="text-center">
+            <div class="text-xl font-bold text-red-500">{{ job.failed }}</div>
+            <div class="text-xs text-gray-500">Failed</div>
+        </div>
+        <div class="text-center">
+            <div class="text-xl font-bold text-gray-400">{{ job.total - job.processed }}</div>
+            <div class="text-xs text-gray-500">Remaining</div>
+        </div>
+    </div>
+
+    <!-- Current Document -->
+    {% if job.current_doc %}
+    <div class="mb-4 p-3 bg-gray-750 rounded">
+        <div class="text-xs text-gray-500">Currently processing:</div>
+        <div class="text-sm text-amber-500 font-mono">{{ job.current_doc }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Timing -->
+    <div class="text-xs text-gray-500 space-y-1">
+        {% if job.started_at %}
+        <div>Started: {{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+        {% endif %}
+        {% if job.completed_at %}
+        <div>Completed: {{ job.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</div>
+        {% endif %}
+    </div>
+
+    <!-- Error -->
+    {% if job.error %}
+    <div class="mt-4 p-3 bg-red-900 bg-opacity-50 border border-red-700 rounded text-red-300 text-sm">
+        {{ job.error }}
+    </div>
+    {% endif %}
+
+    <!-- Log -->
+    {% if job.log %}
+    <div class="mt-4">
+        <div class="text-xs text-gray-500 mb-2">Log:</div>
+        <div class="bg-gray-900 rounded p-3 max-h-32 overflow-y-auto">
+            {% for entry in job.log[-10:] %}
+            <div class="text-xs text-gray-400 font-mono">{{ entry }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Idle State -->
+    <div class="text-center py-8 text-gray-500">
+        <svg class="mx-auto h-12 w-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <p>No indexing job running</p>
+        <p class="text-sm mt-1">Configure and start indexing on the left</p>
+    </div>
+    {% endif %}
+
+    {% if message %}
+    <div class="mt-4 p-3 bg-blue-900 bg-opacity-50 border border-blue-700 rounded text-blue-300 text-sm">
+        {{ message }}
+    </div>
+    {% endif %}
+</div>

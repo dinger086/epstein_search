@@ -1,0 +1,29 @@
+<!-- Question -->
+<div class="flex justify-end">
+    <div class="bg-amber-600 rounded-lg px-4 py-2 max-w-lg">
+        <p class="text-white">{{ question }}</p>
+    </div>
+</div>
+
+<!-- Answer -->
+<div class="flex justify-start">
+    <div class="bg-gray-700 rounded-lg px-4 py-3 max-w-2xl">
+        <div class="prose prose-invert prose-sm max-w-none">
+            {{ answer | replace('\n', '<br>') | safe }}
+        </div>
+
+        {% if sources %}
+        <div class="mt-4 pt-3 border-t border-gray-600">
+            <div class="text-xs text-gray-400 mb-2">Sources:</div>
+            <div class="flex flex-wrap gap-2">
+                {% for source in sources %}
+                <a href="/document/{{ source.doc_id }}"
+                   class="text-xs px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-amber-400">
+                    {{ source.doc_id }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

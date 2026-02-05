@@ -1,0 +1,1 @@
+"""Detective Document Search System."""
