@@ -74,7 +74,7 @@ echo "========================================"
 echo ""
 
 cd "$SCRIPT_DIR"
-uv run python -m main index --mode hybrid
+uv run python -m main build --with-entities --with-images -m hybrid
 
 echo ""
 echo "========================================"
