@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Duplicates - Detective Search{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Duplicate Files</h1>
+        <div class="text-gray-400 text-sm">
+            {% if groups %}
+                {{ groups|length }} group{{ 's' if groups|length != 1 }} &middot; {{ total_dupes }} duplicate file{{ 's' if total_dupes != 1 }}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not groups %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
+        <p class="text-gray-400 text-lg mb-2">No duplicate files detected</p>
+        <p class="text-gray-500 text-sm">
+            Run <code class="bg-gray-700 px-2 py-1 rounded">python -m main duplicates --scan</code> to compute file hashes and detect duplicates.
+        </p>
+    </div>
+    {% else %}
+        {% for group in groups %}
+        <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+            <button
+                class="w-full flex justify-between items-center p-4 hover:bg-gray-750 cursor-pointer text-left"
+                onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.chevron').classList.toggle('rotate-90')"
+            >
+                <div class="flex items-center gap-3">
+                    <svg class="chevron w-4 h-4 text-gray-400 transition-transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <span class="font-mono text-sm text-amber-500">{{ group.file_hash[:12] }}&hellip;</span>
+                    <span class="px-2 py-1 bg-red-900/50 text-red-300 rounded text-xs font-medium">
+                        {{ group.count }} files
+                    </span>
+                </div>
+            </button>
+            <div class="border-t border-gray-700">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-gray-400 text-left">
+                            <th class="px-4 py-2 font-medium">Doc ID</th>
+                            <th class="px-4 py-2 font-medium">File Path</th>
+                            <th class="px-4 py-2 font-medium">Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in group.documents %}
+                        <tr class="border-t border-gray-700/50 hover:bg-gray-750">
+                            <td class="px-4 py-2">
+                                <a href="/document/{{ doc.doc_id }}" class="text-cyan-400 hover:underline">{{ doc.doc_id }}</a>
+                            </td>
+                            <td class="px-4 py-2 text-gray-400 font-mono text-xs truncate max-w-md" title="{{ doc.file_path }}">
+                                {{ doc.file_path }}
+                            </td>
+                            <td class="px-4 py-2 text-gray-400">{{ doc.volume or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

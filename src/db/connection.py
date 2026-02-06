@@ -131,6 +131,12 @@ def init_db():
     except:
         pass  # Column already exists
 
+    # Add file_hash column (for duplicate detection)
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN file_hash TEXT")
+    except:
+        pass  # Column already exists
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_chunks_document
         ON chunks(document_id)
@@ -145,6 +151,11 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_documents_file_type
         ON documents(file_type)
+    """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_file_hash
+        ON documents(file_hash)
     """)
 
     # Extracted entities

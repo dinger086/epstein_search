@@ -25,6 +25,9 @@ from src.db.models import (
     iter_documents_by_status,
     count_documents_by_status,
     count_documents_by_file_type,
+    compute_file_hash,
+    update_document_hash,
+    get_duplicate_groups,
 )
 
 console = Console()
@@ -136,6 +139,15 @@ def index(limit: int | None, volume: str, mode: str, file_type_filter: str):
                     file_type=ft,
                 )
                 registered += 1
+
+            # Compute and store file hash if missing
+            doc = existing or get_document(doc_id)
+            if doc and not doc.get("file_hash"):
+                try:
+                    file_hash = compute_file_hash(str(file_path))
+                    update_document_hash(doc_id, file_hash)
+                except OSError:
+                    pass  # File may not be accessible
 
             progress.advance(task)
 
@@ -731,6 +743,173 @@ def search_images_cmd(query: str, limit: int):
         )
 
     console.print(table)
+
+
+@cli.command()
+@click.option("--scan", is_flag=True, help="Compute hashes for all documents that don't have one yet")
+def duplicates(scan: bool):
+    """Detect and display duplicate files by content hash."""
+    if scan:
+        console.print(Panel("Scanning files for duplicates", title="Duplicates"))
+
+        # Get all documents without a hash
+        all_docs = get_all_documents()
+        unhashed = [d for d in all_docs if not d.get("file_hash")]
+
+        if not unhashed:
+            console.print("[green]All documents already have hashes computed[/green]")
+        else:
+            console.print(f"Computing hashes for {len(unhashed)} documents...")
+
+            hashed = 0
+            errors = 0
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Hashing files...", total=len(unhashed))
+                for doc in unhashed:
+                    progress.update(task, description=f"Hashing {doc['doc_id']}...")
+                    try:
+                        file_hash = compute_file_hash(doc["file_path"])
+                        update_document_hash(doc["doc_id"], file_hash)
+                        hashed += 1
+                    except OSError as e:
+                        errors += 1
+                        console.print(f"[red]Cannot read {doc['doc_id']}: {e}[/red]")
+                    progress.advance(task)
+
+            console.print(f"[green]Hashed {hashed} files[/green]")
+            if errors:
+                console.print(f"[yellow]{errors} files could not be read[/yellow]")
+
+    # Display duplicate groups
+    groups = get_duplicate_groups()
+
+    if not groups:
+        console.print("[green]No duplicate files found[/green]")
+        return
+
+    console.print(f"\n[bold]Found {len(groups)} duplicate groups:[/bold]\n")
+
+    for i, group in enumerate(groups, 1):
+        short_hash = group["file_hash"][:12]
+        console.print(f"[bold cyan]Group {i}[/bold cyan] — hash: {short_hash}… ({group['count']} files)")
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Doc ID", style="cyan")
+        table.add_column("File Path", max_width=60)
+        table.add_column("Volume")
+        table.add_column("Size", justify="right")
+
+        for doc in group["documents"]:
+            try:
+                size = Path(doc["file_path"]).stat().st_size
+                if size >= 1_048_576:
+                    size_str = f"{size / 1_048_576:.1f} MB"
+                elif size >= 1024:
+                    size_str = f"{size / 1024:.1f} KB"
+                else:
+                    size_str = f"{size} B"
+            except OSError:
+                size_str = "N/A"
+            table.add_row(
+                doc["doc_id"],
+                doc["file_path"],
+                doc.get("volume", ""),
+                size_str,
+            )
+
+        console.print(table)
+        console.print()
+
+
+@cli.command()
+@click.option("--limit", "-l", default=None, type=int, help="Maximum documents to process")
+@click.option("--mode", "-m", type=click.Choice(["ocr", "embedded", "hybrid"]), default="hybrid",
+              help="Text extraction mode (default: hybrid)")
+@click.option("--with-entities", is_flag=True, help="Also extract named entities")
+@click.option("--with-images", is_flag=True, help="Also extract images from PDFs")
+@click.pass_context
+def build(ctx, limit, mode, with_entities, with_images):
+    """Build the entire database end-to-end in one command.
+
+    Runs every step in order:
+
+      1. Register documents from the data directory
+
+      2. Extract text (hybrid mode by default)
+
+      3. Chunk text and generate embeddings
+
+      4. Compute file hashes for duplicate detection
+
+      5. (optional) Extract named entities  [--with-entities]
+
+      6. (optional) Extract images from PDFs [--with-images]
+
+      7. Print status summary and duplicate report
+    """
+    import time
+
+    steps = [
+        "Register & index documents",
+        "Scan for duplicate files",
+    ]
+    if with_entities:
+        steps.append("Extract entities")
+    if with_images:
+        steps.append("Extract images")
+    steps.append("Final status report")
+
+    console.print(Panel(
+        "\n".join(f"  {i}. {s}" for i, s in enumerate(steps, 1)),
+        title="Build Database",
+        subtitle=f"mode={mode}"
+        + (f"  limit={limit}" if limit else ""),
+    ))
+
+    t0 = time.time()
+
+    # --- Step 1: Index (register + extract + chunk + embed + hash) ---
+    console.rule("[bold cyan]Step 1 — Register & index documents")
+    ctx.invoke(
+        index,
+        limit=limit,
+        volume=None,
+        mode=mode,
+        file_type_filter="all",
+    )
+
+    # --- Step 2: Hash any remaining unhashed docs ---
+    console.rule("[bold cyan]Step 2 — Scan for duplicate files")
+    ctx.invoke(duplicates, scan=True)
+
+    # --- Step 3 (optional): Entities ---
+    if with_entities:
+        console.rule("[bold cyan]Step 3 — Extract entities")
+        ctx.invoke(entities, entity_type="PERSON", top=50, extract=True, use_llm=False)
+
+    # --- Step 4 (optional): Images ---
+    if with_images:
+        console.rule("[bold cyan]Step {:d} — Extract images".format(
+            4 if with_entities else 3
+        ))
+        ctx.invoke(extract_images, limit=limit or 100, describe=False, model=None, output_dir=None)
+
+    # --- Final: Status summary ---
+    console.rule("[bold cyan]Final — Status summary")
+    ctx.invoke(status)
+
+    elapsed = time.time() - t0
+    if elapsed >= 60:
+        elapsed_str = f"{elapsed / 60:.1f} min"
+    else:
+        elapsed_str = f"{elapsed:.1f}s"
+    console.print(f"\n[bold green]Build complete in {elapsed_str}[/bold green]")
 
 
 @cli.command()

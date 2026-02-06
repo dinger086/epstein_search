@@ -1,5 +1,7 @@
 """Database model operations."""
 
+import hashlib
+from pathlib import Path
 from typing import Optional
 from .connection import get_connection, transaction
 
@@ -448,4 +450,76 @@ def get_all_images(limit: int = None) -> list[dict]:
             ORDER BY d.doc_id, i.page_number, i.image_index
             """
         ).fetchall()
+    return [dict(row) for row in rows]
+
+
+# File hash / duplicate detection operations
+
+def compute_file_hash(file_path: str) -> str:
+    """Compute SHA-256 hash of a file (streaming, memory-safe)."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while True:
+            chunk = f.read(8192)
+            if not chunk:
+                break
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def update_document_hash(doc_id: str, file_hash: str):
+    """Store hash for a document."""
+    with transaction() as conn:
+        conn.execute(
+            "UPDATE documents SET file_hash = ? WHERE doc_id = ?",
+            (file_hash, doc_id)
+        )
+
+
+def get_duplicate_groups() -> list[dict]:
+    """Get groups of documents sharing the same file hash.
+
+    Returns list of dicts with keys: file_hash, count, documents.
+    Each document has: doc_id, file_path, volume.
+    """
+    conn = get_connection()
+    # Find hashes that appear more than once
+    hash_rows = conn.execute(
+        """
+        SELECT file_hash, COUNT(*) as count
+        FROM documents
+        WHERE file_hash IS NOT NULL
+        GROUP BY file_hash
+        HAVING COUNT(*) > 1
+        ORDER BY count DESC
+        """
+    ).fetchall()
+
+    groups = []
+    for row in hash_rows:
+        docs = conn.execute(
+            """
+            SELECT doc_id, file_path, volume, file_type
+            FROM documents
+            WHERE file_hash = ?
+            ORDER BY doc_id
+            """,
+            (row["file_hash"],)
+        ).fetchall()
+        groups.append({
+            "file_hash": row["file_hash"],
+            "count": row["count"],
+            "documents": [dict(d) for d in docs],
+        })
+
+    return groups
+
+
+def get_documents_by_hash(file_hash: str) -> list[dict]:
+    """Get all documents sharing a specific hash."""
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM documents WHERE file_hash = ? ORDER BY doc_id",
+        (file_hash,)
+    ).fetchall()
     return [dict(row) for row in rows]

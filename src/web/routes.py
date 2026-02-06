@@ -25,6 +25,7 @@ from ..db.models import (
     create_document,
     update_document_text,
     update_document_status,
+    get_duplicate_groups,
 )
 from ..search import keyword_search, semantic_search, hybrid_search
 from ..detective import find_connections, find_co_occurring_entities, timeline_search
@@ -376,6 +377,21 @@ async def indexing_page(request: Request):
         "pending": pending,
         "completed": completed,
         "failed": failed,
+    })
+
+
+@router.get("/duplicates", response_class=HTMLResponse)
+async def duplicates_page(request: Request):
+    """View duplicate file groups."""
+    templates = get_templates(request)
+
+    groups = get_duplicate_groups()
+    total_dupes = sum(g["count"] - 1 for g in groups)
+
+    return templates.TemplateResponse("duplicates.html", {
+        "request": request,
+        "groups": groups,
+        "total_dupes": total_dupes,
     })
 
 
