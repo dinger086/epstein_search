@@ -15,6 +15,9 @@ dependencies = [
     "uvicorn[standard]",   # ASGI server
     "jinja2",              # HTML templating
     "python-multipart",    # Form handling
+    "openpyxl",            # Read .xlsx spreadsheets
+    "xlrd",                # Read legacy .xls spreadsheets
+    "faster-whisper",      # Audio/video transcription (CTranslate2-based)
 ]
 
 [project.scripts]

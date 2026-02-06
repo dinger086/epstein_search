@@ -119,6 +119,18 @@ def init_db():
     except:
         pass  # Column already exists
 
+    # Add file_type column (migration for multi-type support)
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN file_type TEXT DEFAULT 'pdf'")
+    except:
+        pass  # Column already exists
+
+    # Add duration_seconds column (for audio/video files)
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN duration_seconds REAL")
+    except:
+        pass  # Column already exists
+
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_chunks_document
         ON chunks(document_id)
@@ -128,6 +140,11 @@ def init_db():
     conn.execute("""
         CREATE INDEX IF NOT EXISTS idx_documents_status
         ON documents(ocr_status)
+    """)
+
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_documents_file_type
+        ON documents(file_type)
     """)
 
     # Extracted entities

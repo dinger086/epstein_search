@@ -21,6 +21,10 @@ CHUNK_SIZE = 500  # Characters per chunk
 CHUNK_OVERLAP = 50  # Overlap between chunks
 BATCH_SIZE = 10  # Documents to process at once
 
+# Whisper transcription
+WHISPER_MODEL_SIZE = "base"
+WHISPER_LANGUAGE = "en"
+
 # Search settings
 TOP_K_RESULTS = 10
 HYBRID_KEYWORD_WEIGHT = 0.3

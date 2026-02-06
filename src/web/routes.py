@@ -100,34 +100,47 @@ def _do_indexing(mode: str, limit: int):
     """Actual indexing logic."""
     global _indexing_job
 
-    from ..extraction import extract_text_from_pdf, extract_embedded_text, extract_hybrid_text
+    from ..extraction import (
+        extract_text_from_pdf, extract_embedded_text, extract_hybrid_text,
+        classify_file, ALL_EXTENSIONS, EXTRACTORS,
+    )
     from ..indexing import chunk_document, VectorStore, get_embeddings
     from ..db.models import get_chunks_for_document, update_chunk_embedding
 
-    # Find PDFs
     if not DATA_DIR.exists():
         _indexing_job.log.append("Data directory not found")
         return
 
-    pdf_files = list(DATA_DIR.rglob("*.pdf"))[:limit]
-    _indexing_job.total = len(pdf_files)
-    _indexing_job.log.append(f"Found {len(pdf_files)} PDF files")
+    # Find all supported files (not just PDFs)
+    seen_lower: set[str] = set()
+    all_files: list[Path] = []
+    for f in DATA_DIR.rglob("*"):
+        if f.is_file() and f.suffix.lower() in ALL_EXTENSIONS:
+            key = str(f).lower()
+            if key not in seen_lower:
+                seen_lower.add(key)
+                all_files.append(f)
+
+    all_files = all_files[:limit]
+    _indexing_job.total = len(all_files)
+    _indexing_job.log.append(f"Found {len(all_files)} files")
 
     # Register documents
     registered = 0
-    for pdf_path in pdf_files:
-        doc_id = pdf_path.stem
-        vol = pdf_path.parent.name if pdf_path.parent != DATA_DIR else ""
+    for file_path in all_files:
+        doc_id = file_path.stem
+        vol = file_path.parent.name if file_path.parent != DATA_DIR else ""
 
         existing = get_document(doc_id)
         if not existing:
-            create_document(doc_id=doc_id, file_path=str(pdf_path), volume=vol)
+            ft = classify_file(file_path)
+            create_document(doc_id=doc_id, file_path=str(file_path), volume=vol, file_type=ft)
             registered += 1
 
     _indexing_job.log.append(f"Registered {registered} new documents")
 
     if mode == "register":
-        _indexing_job.processed = len(pdf_files)
+        _indexing_job.processed = len(all_files)
         return
 
     # Process documents
@@ -143,39 +156,53 @@ def _do_indexing(mode: str, limit: int):
     for doc in pending:
         doc_id = doc["doc_id"]
         file_path = doc["file_path"]
+        doc_file_type = doc.get("file_type", "pdf")
         _indexing_job.current_doc = doc_id
 
         try:
-            # Extract text
-            embedded_text = None
-            ocr_text = None
+            # Non-PDF types: use extractor registry
+            if doc_file_type in EXTRACTORS:
+                extractor = EXTRACTORS[doc_file_type]
+                text, metadata = extractor(file_path)
 
-            if mode == "embedded":
-                text, page_count = extract_embedded_text(file_path)
                 if not text.strip():
                     _indexing_job.processed += 1
                     continue
-                embedded_text = text
-            elif mode == "hybrid":
-                text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
-                if not text.strip():
-                    _indexing_job.processed += 1
-                    continue
-            else:  # ocr
-                text, page_count = extract_text_from_pdf(file_path)
-                ocr_text = text
 
-            update_document_text(
-                doc_id, text, page_count,
-                embedded_text=embedded_text,
-                ocr_text=ocr_text,
-            )
+                update_document_text(
+                    doc_id, text,
+                    duration_seconds=metadata.get("duration_seconds"),
+                )
+            else:
+                # PDF: use existing mode logic
+                embedded_text = None
+                ocr_text = None
+
+                if mode == "embedded":
+                    text, page_count = extract_embedded_text(file_path)
+                    if not text.strip():
+                        _indexing_job.processed += 1
+                        continue
+                    embedded_text = text
+                elif mode == "hybrid":
+                    text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
+                    if not text.strip():
+                        _indexing_job.processed += 1
+                        continue
+                else:  # ocr
+                    text, page_count = extract_text_from_pdf(file_path)
+                    ocr_text = text
+
+                update_document_text(
+                    doc_id, text, page_count,
+                    embedded_text=embedded_text,
+                    ocr_text=ocr_text,
+                )
 
             # Chunk and embed
             chunk_ids = chunk_document(doc_id)
 
             if chunk_ids:
-                # Refresh document to get the ID
                 doc_refreshed = get_document(doc_id)
                 chunks = get_chunks_for_document(doc_refreshed["id"])
 
@@ -333,16 +360,19 @@ async def indexing_page(request: Request):
     completed = len(get_documents_by_status("completed", limit=100000))
     failed = len(get_documents_by_status("failed", limit=100000))
 
-    # Count PDFs in data directory
-    pdf_count = 0
+    # Count all supported files in data directory
+    from ..extraction import ALL_EXTENSIONS
+    file_count = 0
     if DATA_DIR.exists():
-        pdf_count = len(list(DATA_DIR.rglob("*.pdf")))
+        for f in DATA_DIR.rglob("*"):
+            if f.is_file() and f.suffix.lower() in ALL_EXTENSIONS:
+                file_count += 1
 
     return templates.TemplateResponse("indexing.html", {
         "request": request,
         "job": job,
         "doc_count": doc_count,
-        "pdf_count": pdf_count,
+        "pdf_count": file_count,
         "pending": pending,
         "completed": completed,
         "failed": failed,

@@ -10,16 +10,17 @@ def create_document(
     doc_id: str,
     file_path: str,
     volume: str = "",
-    page_count: int = 0
+    page_count: int = 0,
+    file_type: str = "pdf",
 ) -> int:
     """Create a new document record. Returns document ID."""
     with transaction() as conn:
         cursor = conn.execute(
             """
-            INSERT INTO documents (doc_id, file_path, volume, page_count, ocr_status)
-            VALUES (?, ?, ?, ?, 'pending')
+            INSERT INTO documents (doc_id, file_path, volume, page_count, ocr_status, file_type)
+            VALUES (?, ?, ?, ?, 'pending', ?)
             """,
-            (doc_id, file_path, volume, page_count)
+            (doc_id, file_path, volume, page_count, file_type)
         )
         return cursor.lastrowid
 
@@ -66,7 +67,7 @@ def iter_documents_by_status(status: str, batch_size: int = 100):
     while True:
         rows = conn.execute(
             """
-            SELECT id, doc_id, file_path, volume, page_count, ocr_status
+            SELECT id, doc_id, file_path, volume, page_count, ocr_status, file_type
             FROM documents
             WHERE ocr_status = ? AND id > ?
             ORDER BY id
@@ -93,6 +94,24 @@ def count_documents_by_status(status: str) -> int:
     return row["count"]
 
 
+def count_documents_by_file_type() -> list[dict]:
+    """Count documents grouped by file_type."""
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT COALESCE(file_type, 'pdf') as file_type,
+               COUNT(*) as total,
+               SUM(CASE WHEN ocr_status = 'completed' THEN 1 ELSE 0 END) as completed,
+               SUM(CASE WHEN ocr_status = 'pending' THEN 1 ELSE 0 END) as pending,
+               SUM(CASE WHEN ocr_status = 'failed' THEN 1 ELSE 0 END) as failed
+        FROM documents
+        GROUP BY COALESCE(file_type, 'pdf')
+        ORDER BY total DESC
+        """
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def update_document_status(doc_id: str, status: str):
     """Update document OCR status."""
     with transaction() as conn:
@@ -108,6 +127,7 @@ def update_document_text(
     page_count: int = None,
     embedded_text: str = None,
     ocr_text: str = None,
+    duration_seconds: float = None,
 ):
     """Update document extracted text and optional raw text archives."""
     with transaction() as conn:
@@ -123,6 +143,9 @@ def update_document_text(
         if ocr_text is not None:
             clauses.append("ocr_text = ?")
             params.append(ocr_text)
+        if duration_seconds is not None:
+            clauses.append("duration_seconds = ?")
+            params.append(duration_seconds)
 
         params.append(doc_id)
         conn.execute(

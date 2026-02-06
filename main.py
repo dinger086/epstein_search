@@ -24,6 +24,7 @@ from src.db.models import (
     get_all_documents,
     iter_documents_by_status,
     count_documents_by_status,
+    count_documents_by_file_type,
 )
 
 console = Console()
@@ -42,7 +43,10 @@ def cli():
 @click.option("--volume", "-v", help="Specific volume to process")
 @click.option("--mode", "-m", type=click.Choice(["ocr", "embedded", "hybrid", "register"]), default="hybrid",
               help="Processing mode: ocr (full OCR), embedded (extract text only), hybrid (smart), register (no extraction)")
-def index(limit: int | None, volume: str, mode: str):
+@click.option("--file-type", "-t", "file_type_filter",
+              type=click.Choice(["all", "pdf", "spreadsheet", "video", "audio", "litigation"]),
+              default="all", help="Filter by file type")
+def index(limit: int | None, volume: str, mode: str, file_type_filter: str):
     """Index documents from the data directory.
 
     Modes:
@@ -51,7 +55,10 @@ def index(limit: int | None, volume: str, mode: str):
       - hybrid: Smart mode — embedded text first, OCR only pages with poor text (recommended)
       - register: Just register documents, no text extraction
     """
-    from src.extraction import extract_text_from_pdf, extract_embedded_text, get_pdf_page_count, extract_hybrid_text
+    from src.extraction import (
+        extract_text_from_pdf, extract_embedded_text, get_pdf_page_count,
+        extract_hybrid_text, classify_file, ALL_EXTENSIONS, EXTRACTORS,
+    )
     from src.indexing import chunk_document, VectorStore
     from src.db.models import update_document_text
 
@@ -61,24 +68,44 @@ def index(limit: int | None, volume: str, mode: str):
         "hybrid": "Hybrid extraction (smart — OCR only where needed)",
         "register": "Registration only",
     }
-    console.print(Panel(f"Starting document indexing - {mode_desc[mode]}", title="Index"))
+    type_label = f" [file type: {file_type_filter}]" if file_type_filter != "all" else ""
+    console.print(Panel(f"Starting document indexing - {mode_desc[mode]}{type_label}", title="Index"))
 
-    # Find PDFs
+    # Find files (multi-extension scan)
     data_path = DATA_DIR
     if not data_path.exists():
         console.print(f"[red]Data directory not found: {data_path}[/red]")
         console.print("Please create the data directory and add your documents.")
         return
 
-    pdf_files = list(data_path.rglob("*.pdf"))
-    if limit:
-        pdf_files = pdf_files[:limit]
+    # Collect all supported files, deduplicate case-insensitively
+    seen_lower: set[str] = set()
+    all_files: list[Path] = []
+    for f in data_path.rglob("*"):
+        if f.is_file() and f.suffix.lower() in ALL_EXTENSIONS:
+            key = str(f).lower()
+            if key not in seen_lower:
+                seen_lower.add(key)
+                # Apply file type filter
+                ft = classify_file(f)
+                if file_type_filter == "all" or ft == file_type_filter:
+                    all_files.append(f)
 
-    if not pdf_files:
-        console.print("[yellow]No PDF files found in data directory.[/yellow]")
+    if limit:
+        all_files = all_files[:limit]
+
+    if not all_files:
+        console.print("[yellow]No supported files found in data directory.[/yellow]")
         return
 
-    console.print(f"Found {len(pdf_files)} PDF files")
+    # Show counts by type
+    type_counts: dict[str, int] = {}
+    for f in all_files:
+        ft = classify_file(f)
+        type_counts[ft] = type_counts.get(ft, 0) + 1
+    for ft, count in sorted(type_counts.items()):
+        console.print(f"  {ft}: {count} files")
+    console.print(f"Found {len(all_files)} files total")
 
     # Register documents
     registered = 0
@@ -89,11 +116,11 @@ def index(limit: int | None, volume: str, mode: str):
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=console,
     ) as progress:
-        task = progress.add_task("Registering documents...", total=len(pdf_files))
+        task = progress.add_task("Registering documents...", total=len(all_files))
 
-        for pdf_path in pdf_files:
-            doc_id = pdf_path.stem
-            vol = pdf_path.parent.name if pdf_path.parent != data_path else ""
+        for file_path in all_files:
+            doc_id = file_path.stem
+            vol = file_path.parent.name if file_path.parent != data_path else ""
 
             if volume and vol != volume:
                 progress.advance(task)
@@ -101,10 +128,12 @@ def index(limit: int | None, volume: str, mode: str):
 
             existing = get_document(doc_id)
             if not existing:
+                ft = classify_file(file_path)
                 create_document(
                     doc_id=doc_id,
-                    file_path=str(pdf_path),
-                    volume=vol
+                    file_path=str(file_path),
+                    volume=vol,
+                    file_type=ft,
                 )
                 registered += 1
 
@@ -147,37 +176,57 @@ def index(limit: int | None, volume: str, mode: str):
             doc_count += 1
             doc_id = doc["doc_id"]
             file_path = doc["file_path"]
+            doc_file_type = doc.get("file_type", "pdf")
+
+            # Apply file type filter during processing
+            if file_type_filter != "all" and doc_file_type != file_type_filter:
+                progress.advance(task)
+                continue
 
             progress.update(task, description=f"Processing {doc_id}...")
 
             try:
-                # Extract text based on mode
-                embedded_text = None
-                ocr_text = None
+                # Non-PDF types: use the extractor registry
+                if doc_file_type in EXTRACTORS:
+                    extractor = EXTRACTORS[doc_file_type]
+                    text, metadata = extractor(file_path)
 
-                if mode == "embedded":
-                    text, page_count = extract_embedded_text(file_path)
-                    if not text.strip():
-                        # No embedded text found, skip this doc
-                        skipped += 1
-                        progress.advance(task)
-                        continue
-                    embedded_text = text
-                elif mode == "hybrid":
-                    text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
                     if not text.strip():
                         skipped += 1
                         progress.advance(task)
                         continue
-                else:  # ocr mode
-                    text, page_count = extract_text_from_pdf(file_path)
-                    ocr_text = text
 
-                update_document_text(
-                    doc_id, text, page_count,
-                    embedded_text=embedded_text,
-                    ocr_text=ocr_text,
-                )
+                    update_document_text(
+                        doc_id, text,
+                        duration_seconds=metadata.get("duration_seconds"),
+                    )
+                else:
+                    # PDF: use existing mode logic
+                    embedded_text = None
+                    ocr_text = None
+
+                    if mode == "embedded":
+                        text, page_count = extract_embedded_text(file_path)
+                        if not text.strip():
+                            skipped += 1
+                            progress.advance(task)
+                            continue
+                        embedded_text = text
+                    elif mode == "hybrid":
+                        text, embedded_text, ocr_text, page_count = extract_hybrid_text(file_path)
+                        if not text.strip():
+                            skipped += 1
+                            progress.advance(task)
+                            continue
+                    else:  # ocr mode
+                        text, page_count = extract_text_from_pdf(file_path)
+                        ocr_text = text
+
+                    update_document_text(
+                        doc_id, text, page_count,
+                        embedded_text=embedded_text,
+                        ocr_text=ocr_text,
+                    )
 
                 # Chunk and embed
                 chunk_ids = chunk_document(doc_id)
@@ -229,7 +278,7 @@ def index(limit: int | None, volume: str, mode: str):
 
     console.print(f"\n[green]Successfully processed {processed} documents[/green]")
     if skipped > 0:
-        console.print(f"[yellow]Skipped {skipped} documents (no embedded text)[/yellow]")
+        console.print(f"[yellow]Skipped {skipped} documents (no extractable text)[/yellow]")
     console.print(f"Total documents in database: {get_document_count()}")
     console.print(f"Total embeddings in vector store: {vector_store.count()}")
 
@@ -479,6 +528,27 @@ def status():
     console.print(f"[bold]Completed:[/bold] [green]{completed}[/green]")
     console.print(f"[bold]Pending:[/bold] [yellow]{pending}[/yellow]")
     console.print(f"[bold]Failed:[/bold] [red]{failed}[/red]")
+
+    # Show counts by file type
+    type_counts = count_documents_by_file_type()
+    if type_counts:
+        console.print("\n[bold]By file type:[/bold]")
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Type", style="cyan")
+        table.add_column("Total", justify="right")
+        table.add_column("Completed", justify="right", style="green")
+        table.add_column("Pending", justify="right", style="yellow")
+        table.add_column("Failed", justify="right", style="red")
+
+        for row in type_counts:
+            table.add_row(
+                row["file_type"],
+                str(row["total"]),
+                str(row["completed"]),
+                str(row["pending"]),
+                str(row["failed"]),
+            )
+        console.print(table)
 
     try:
         from src.indexing import VectorStore
